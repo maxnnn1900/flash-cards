@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Флеш-карты</title>
+  <!-- Подключение Vue 3 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <!-- Подключение marked.js для парсинга Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Подключение highlight.js для подсветки синтаксиса -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/php.min.js"></script>
+  <!-- Подключение Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex justify-center">
+  <div id="app" class="max-w-3xl w-full p-6">
+    <h1 class="text-2xl font-bold mb-4 text-gray-800">Флеш-карты для обучения</h1>
+
+    <!-- Навигационные кнопки -->
+    <div class="flex space-x-4 mb-6">
+      <button 
+        @click="mode = 'learn'" 
+        class="px-4 py-2 rounded-lg transition"
+        :class="mode === 'learn' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
+      >Учить</button>
+      <button 
+        @click="mode = 'load'" 
+        class="px-4 py-2 rounded-lg transition"
+        :class="mode === 'load' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
+      >Загрузить</button>
+    </div>
+
+    <!-- Режим загрузки карточек -->
+    <div v-if="mode === 'load'">
+      <textarea 
+        v-model="inputText" 
+        placeholder="Вставьте карточки в формате Markdown"
+        class="w-full h-48 p-4 mb-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      ></textarea>
+      <div class="flex space-x-4 mb-4">
+        <button 
+          @click="loadCards" 
+          class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+        >Загрузить карточки</button>
+        <button 
+          @click="saveCards" 
+          :disabled="!cards.length"
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
+        >Сохранить</button>
+      </div>
+      <div v-if="savedDecks.length" class="mt-4">
+        <h2 class="text-lg font-semibold mb-2 text-gray-800">Сохранённые колоды</h2>
+        <ul class="space-y-2">
+          <li v-for="deck in savedDecks" :key="deck.timestamp" class="flex justify-between items-center">
+            <a 
+              href="#" 
+              @click.prevent="loadSavedDeck(deck.timestamp)"
+              class="text-blue-600 hover:underline"
+            >{{ formatTimestamp(deck.timestamp) }}</a>
+            <button 
+              @click="deleteSavedDeck(deck.timestamp)"
+              class="text-red-600 hover:text-red-800"
+            >Удалить</button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Режим обучения -->
+    <div v-if="mode === 'learn'">
+      <div v-if="cards.length === 0" class="text-center py-8">
+        <p class="text-gray-600 mb-4">Нет загруженных карточек</p>
+        <button 
+          @click="mode = 'load'" 
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >Загрузить карточки</button>
+      </div>
+      
+      <div v-else>
+        <div class="flex justify-between mb-4">
+          <button 
+            @click="showCard" 
+            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+          >Показать карточку</button>
+          <div class="text-gray-600">
+            Осталось карточек: {{ cards.length }}
+          </div>
+        </div>
+        
+        <div v-if="currentCard" class="bg-white border rounded-lg shadow-md p-6">
+          <div class="text-sm text-gray-500 mb-2">
+            Карточка {{ currentCardIndex + 1 }} из {{ cards.length }} | Вес: {{ currentCard.weight.toFixed(2) }}
+          </div>
+          <div v-html="renderMarkdown(currentCard.question)" class="text-lg mb-4"></div>
+          <div v-if="showAnswer" class="border-t pt-4 mt-4">
+            <div v-html="renderMarkdown(currentCard.answer)" class="text-gray-700"></div>
+          </div>
+          <div class="mt-4">
+            <div v-if="!showAnswer" class="flex space-x-2">
+              <button 
+                @click="rateCard('easy')" 
+                class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+              >Легко</button>
+              <button 
+                @click="rateCard('normal')" 
+                class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition"
+              >Понятно</button>
+              <button 
+                @click="rateCard('hard')" 
+                class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+              >Сложно</button>
+            </div>
+            <div v-else>
+              <button 
+                @click="showCard()" 
+                class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+              >Следующая</button>
+              <button 
+                @click="removeCurrentCard()" 
+                class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg/transition-all hover:bg-gray-300/75 rounded-lg"
+              >Удалить карточку</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          mode: 'load', // 'load' или 'learn'
+          inputText: `Q.
+Как создать связь "один ко многим" в Eloquent ORM?
+A.
+Используйте метод \`hasMany\` в модели. Например:
+
+\`\`\`php
+class User extends Model {
+    public function posts() {
+        return $this->hasMany(Post::class);
+    }
+}
+\`\`\`
+
+---
+
+Q.
+Как вывести список элементов в Blade с использованием директивы?
+A.
+Используйте директиву \`@foreach\`. Например:
+
+\`\`\`php
+@foreach ($users as $user)
+    <p>{{ $user->name }}</p>
+@endforeach
+\`\`\`
+
+---
+
+Q.
+Как определить маршрут с параметром в Laravel?
+A.
+Используйте фигурные скобки для параметров в маршруте. Например:
+
+\`\`\`php
+Route::get('/user/{id}', function ($id) {
+    return 'User ID: ' . $id;
+});
+\`\`\``,
+          cards: [],
+          currentCard: null,
+          currentCardIndex: -1,
+          showAnswer: false,
+          savedDecks: []
+        };
+      },
+      methods: {
+        loadCards() {
+          this.cards = [];
+          const cardStrings = this.inputText.split('---').map(s => s.trim()).filter(s => s);
+          cardStrings.forEach(cardStr => {
+            const lines = cardStr.split('\n');
+            let question = '';
+            let answer = '';
+            let isAnswer = false;
+
+            lines.forEach(line => {
+              if (line.startsWith('Q.')) {
+                question = line.slice(2).trim();
+                isAnswer = false;
+              } else if (line.startsWith('A.')) {
+                answer = line.slice(2).trim();
+                isAnswer = true;
+              } else if (isAnswer) {
+                answer += '\n' + line;
+              } else {
+                question += '\n' + line;
+              }
+            });
+
+            if (question && answer) {
+              this.cards.push({
+                question: question.trim(),
+                answer: answer.trim(),
+                weight: 1
+              });
+            }
+          });
+          this.currentCard = null;
+          this.currentCardIndex = -1;
+          this.showAnswer = false;
+          
+          // Переключаемся в режим обучения после загрузки карточек
+          if (this.cards.length > 0) {
+            this.mode = 'learn';
+          }
+        },
+        saveCards() {
+          if (!this.cards.length) return;
+          const timestamp = new Date().toISOString();
+          const deckData = {
+            timestamp,
+            cards: this.cards,
+            inputText: this.inputText
+          };
+          localStorage.setItem(`deck_${timestamp}`, JSON.stringify(deckData));
+          this.loadSavedDecks();
+        },
+        loadSavedDecks() {
+          this.savedDecks = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('deck_')) {
+              const deckData = JSON.parse(localStorage.getItem(key));
+              this.savedDecks.push({
+                timestamp: deckData.timestamp,
+                cards: deckData.cards,
+                inputText: deckData.inputText
+              });
+            }
+          }
+          this.savedDecks.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        },
+        loadSavedDeck(timestamp) {
+          const deckData = JSON.parse(localStorage.getItem(`deck_${timestamp}`));
+          if (deckData) {
+            this.inputText = deckData.inputText;
+            this.cards = deckData.cards;
+            this.currentCard = null;
+            this.currentCardIndex = -1;
+            this.showAnswer = false;
+            this.mode = 'learn';
+          }
+        },
+        deleteSavedDeck(timestamp) {
+          localStorage.removeItem(`deck_${timestamp}`);
+          this.loadSavedDecks();
+        },
+        renderMarkdown(text) {
+          const html = marked.parse(text);
+          return html.replace(/<pre><code>/g, '<pre><code class="hljs">');
+        },
+        showCard() {
+          if (!this.cards.length) return;
+
+          const totalWeight = this.cards.reduce((sum, card) => sum + card.weight, 0);
+          let random = Math.random() * totalWeight;
+          let selectedCard = null;
+          let selectedIndex = -1;
+
+          for (let i = 0; i < this.cards.length; i++) {
+            random -= this.cards[i].weight;
+            if (random <= 0) {
+              selectedCard = this.cards[i];
+              selectedIndex = i;
+              break;
+            }
+          }
+
+          this.currentCard = selectedCard || this.cards[this.cards.length - 1];
+          this.currentCardIndex = selectedIndex !== -1 ? selectedIndex : this.cards.length - 1;
+          this.showAnswer = false;
+
+          // Подсветка синтаксиса после рендеринга
+          this.$nextTick(() => {
+            document.querySelectorAll('pre code').forEach(block => {
+              hljs.highlightElement(block);
+            });
+          });
+        },
+        rateCard(rating) {
+          if (rating === 'easy') {
+            this.currentCard.weight = Math.max(0.1, this.currentCard.weight * 0.5);
+          } else if (rating === 'hard') {
+            this.currentCard.weight = Math.min(5, this.currentCard.weight * 1.5);
+          }
+          this.showAnswer = true;
+
+          // Подсветка синтаксиса для ответа
+          this.$nextTick(() => {
+            document.querySelectorAll('pre code').forEach(block => {
+              hljs.highlightElement(block);
+            });
+          });
+        },
+        removeCurrentCard() {
+          if (this.currentCardIndex >= 0) {
+            this.cards.splice(this.currentCardIndex, 1);
+            this.currentCard = null;
+            this.currentCardIndex = -1;
+            this.showAnswer = false;
+            
+            if (this.cards.length === 0) {
+              this.mode = 'load';
+            } else {
+              this.showCard();
+            }
+          }
+        },
+        formatTimestamp(timestamp) {
+          const date = new Date(timestamp);
+          return date.toLocaleString('ru-RU', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }
+      },
+      mounted() {
+        // Инициализация highlight.js
+        hljs.configure({ languages: ['php'] });
+        // Загрузка сохранённых колод при старте
+        this.loadSavedDecks();
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
