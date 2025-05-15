@@ -85,9 +85,6 @@
             @click="showCard" 
             class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
           >Показать карточку</button>
-          <div class="text-gray-600">
-            Осталось карточек: {{ cards.length }}
-          </div>
         </div>
         
         <div v-if="currentCard" class="bg-white border rounded-lg shadow-md p-6">
@@ -113,7 +110,7 @@
                 class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
               >Сложно</button>
             </div>
-            <div v-else>
+            <div class="flex space-x-2" v-else>
               <button 
                 @click="showCard()" 
                 class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
